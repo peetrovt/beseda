@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace beseda {
 
@@ -11,8 +12,8 @@ namespace {
 std::mutex g_output_mutex;  // keeps lines from the two threads from interleaving
 }  // namespace
 
-ChatPeer::ChatPeer(std::uint16_t listen_port, std::optional<Endpoint> peer)
-    : socket_(listen_port), peer_(peer) {}
+ChatPeer::ChatPeer(std::uint16_t listen_port, std::optional<Endpoint> peer, std::string name)
+    : socket_(listen_port), name_(std::move(name)), peer_(peer) {}
 
 void ChatPeer::run() {
     std::thread receiver(&ChatPeer::receive_loop, this);
@@ -49,7 +50,14 @@ void ChatPeer::receive_loop() {
 
         std::lock_guard<std::mutex> lock(g_output_mutex);
         if (learned) std::cerr << "* chatting with " << msg->from.to_string() << std::endl;
-        std::cout << msg->from.to_string() << ": " << msg->payload << std::endl;
+        std::string sender = msg->from.to_string();
+        std::string text = msg->payload;
+        auto nl = text.find('\n');
+        if (nl != std::string::npos && nl > 0 && nl <= kMaxNameSize) {
+            sender = text.substr(0, nl);
+            text.erase(0, nl + 1);
+        }
+        std::cout << sender << ": " << text << std::endl;
     }
 }
 
@@ -65,13 +73,14 @@ void ChatPeer::send_loop() {
                          "or restart with a peer address" << std::endl;
             continue;
         }
-        if (line.size() > kMaxMessageSize) {
+        const std::size_t max_text = kMaxMessageSize - name_.size() - 1;
+        if (line.size() > max_text) {
             std::lock_guard<std::mutex> lock(g_output_mutex);
-            std::cerr << "* message truncated to " << kMaxMessageSize << " bytes" << std::endl;
-            line.resize(kMaxMessageSize);
+            std::cerr << "* message truncated to " << max_text << " bytes" << std::endl;
+            line.resize(max_text);
         }
         try {
-            socket_.send_to(*target, line);
+            socket_.send_to(*target, name_ + '\n' + line);
         } catch (const std::exception& e) {
             std::lock_guard<std::mutex> lock(g_output_mutex);
             std::cerr << "* send failed: " << e.what() << std::endl;
