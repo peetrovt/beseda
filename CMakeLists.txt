@@ -11,6 +11,6 @@ endif()
 
 find_package(Threads REQUIRED)
 
-add_executable(beseda src/main.cpp src/chat.cpp src/udp_socket.cpp)
+add_executable(beseda src/main.cpp src/chat.cpp src/history.cpp src/udp_socket.cpp)
 target_compile_options(beseda PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(beseda PRIVATE Threads::Threads)

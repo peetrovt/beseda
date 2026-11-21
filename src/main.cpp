@@ -23,7 +23,10 @@ void usage(const char* prog) {
               << "  HOST[:PORT]     peer to chat with (port defaults to " << kDefaultPort << ").\n"
               << "                  Without it, you chat with whoever messages you first.\n"
               << "\n"
-              << "Type a line and press Enter to send it. Ctrl-D quits.\n";
+              << "Type a line and press Enter to send it. Ctrl-D quits.\n"
+              << "Type /history [N] to show the last N messages (default: all) with timestamps.\n"
+              << "History is saved per partner in $XDG_DATA_HOME/beseda (default ~/.local/share/beseda)\n"
+              << "and restored once your partner's name is known (their first message).\n";
 }
 
 std::uint16_t parse_port(const std::string& s) {
