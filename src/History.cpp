@@ -1,4 +1,4 @@
-#include "history.hpp"
+#include "History.h"
 
 #include <cstdlib>
 #include <ctime>
@@ -10,7 +10,7 @@ namespace beseda {
 
 namespace {
 
-std::string escape(const std::string& s) {
+std::string Escape(const std::string& s) {
     std::string out;
     out.reserve(s.size());
     for (char c : s) {
@@ -24,7 +24,7 @@ std::string escape(const std::string& s) {
     return out;
 }
 
-std::string unescape(const std::string& s) {
+std::string Unescape(const std::string& s) {
     std::string out;
     out.reserve(s.size());
     for (std::size_t i = 0; i < s.size(); ++i) {
@@ -38,7 +38,7 @@ std::string unescape(const std::string& s) {
     return out;
 }
 
-bool parse_line(const std::string& line, HistoryEntry& entry) {
+bool ParseLine(const std::string& line, HistoryEntry& entry) {
     auto t1 = line.find('\t');
     if (t1 == std::string::npos) return false;
     auto t2 = line.find('\t', t1 + 1);
@@ -54,14 +54,14 @@ bool parse_line(const std::string& line, HistoryEntry& entry) {
 
     entry.time = std::chrono::system_clock::from_time_t(static_cast<std::time_t>(v));
     entry.outgoing = dir == "o";
-    entry.sender = unescape(line.substr(t2 + 1, t3 - t2 - 1));
-    entry.text = unescape(line.substr(t3 + 1));
+    entry.sender = Unescape(line.substr(t2 + 1, t3 - t2 - 1));
+    entry.text = Unescape(line.substr(t3 + 1));
     return true;
 }
 
 // Keeps a name usable as a single file name: anything other than
 // [A-Za-z0-9._-] is written as %XX, and a leading '.' too.
-std::string safe_file_name(const std::string& name) {
+std::string SafeFileName(const std::string& name) {
     static const char hex[] = "0123456789ABCDEF";
     std::string out;
     for (std::size_t i = 0; i < name.size(); ++i) {
@@ -81,7 +81,7 @@ std::string safe_file_name(const std::string& name) {
 
 }  // namespace
 
-std::string HistoryEntry::to_string() const {
+std::string HistoryEntry::ToString() const {
     std::time_t t = std::chrono::system_clock::to_time_t(time);
     std::tm tm{};
     ::localtime_r(&t, &tm);
@@ -92,15 +92,15 @@ std::string HistoryEntry::to_string() const {
 
 MessageHistory::MessageHistory(std::size_t capacity) : capacity_(capacity) {}
 
-void MessageHistory::add(std::string sender, std::string text, bool outgoing) {
+void MessageHistory::Add(std::string sender, std::string text, bool outgoing) {
     HistoryEntry entry{std::chrono::system_clock::now(), std::move(sender), std::move(text), outgoing};
     std::lock_guard<std::mutex> lock(mutex_);
-    if (file_.is_open()) write_entry(entry);
+    if (file_.is_open()) WriteEntry(entry);
     entries_.push_back(std::move(entry));
-    trim();
+    Trim();
 }
 
-std::size_t MessageHistory::attach_file(const std::string& path) {
+std::size_t MessageHistory::AttachFile(const std::string& path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (file_.is_open()) return 0;
 
@@ -110,7 +110,7 @@ std::size_t MessageHistory::attach_file(const std::string& path) {
         std::string line;
         HistoryEntry entry;
         while (std::getline(in, line)) {
-            if (!parse_line(line, entry)) continue;  // skip damaged lines
+            if (!ParseLine(line, entry)) continue;  
             restored.push_back(std::move(entry));
             if (restored.size() > capacity_) restored.pop_front();
         }
@@ -120,36 +120,36 @@ std::size_t MessageHistory::attach_file(const std::string& path) {
     if (!file_) throw std::runtime_error("cannot open history file '" + path + "'");
     std::filesystem::permissions(path, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
 
-    for (const auto& e : entries_) write_entry(e);
+    for (const auto& e : entries_) WriteEntry(e);
     const std::size_t count = restored.size();
     entries_.insert(entries_.begin(), restored.begin(), restored.end());
-    trim();
+    Trim();
     return count;
 }
 
-bool MessageHistory::attached() const {
+bool MessageHistory::Attached() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return file_.is_open();
 }
 
-std::vector<HistoryEntry> MessageHistory::last(std::size_t count) const {
+std::vector<HistoryEntry> MessageHistory::Last(std::size_t count) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::size_t n = (count == 0 || count > entries_.size()) ? entries_.size() : count;
     return std::vector<HistoryEntry>(entries_.end() - static_cast<std::ptrdiff_t>(n), entries_.end());
 }
 
-void MessageHistory::write_entry(const HistoryEntry& entry) {
+void MessageHistory::WriteEntry(const HistoryEntry& entry) {
     file_ << static_cast<long long>(std::chrono::system_clock::to_time_t(entry.time)) << '\t'
-          << (entry.outgoing ? 'o' : 'i') << '\t' << escape(entry.sender) << '\t'
-          << escape(entry.text) << '\n';
+          << (entry.outgoing ? 'o' : 'i') << '\t' << Escape(entry.sender) << '\t'
+          << Escape(entry.text) << '\n';
     file_.flush();  // survive a crash or Ctrl-C
 }
 
-void MessageHistory::trim() {
+void MessageHistory::Trim() {
     while (entries_.size() > capacity_) entries_.pop_front();
 }
 
-std::string history_path(const std::string& self, const std::string& partner) {
+std::string HistoryPath(const std::string& self, const std::string& partner) {
     namespace fs = std::filesystem;
     fs::path base;
     if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg) {
@@ -161,10 +161,10 @@ std::string history_path(const std::string& self, const std::string& partner) {
     }
 
     fs::path root = base / "beseda";
-    fs::path dir = root / safe_file_name(self);
+    fs::path dir = root / SafeFileName(self);
     fs::create_directories(dir);
     for (const auto& d : {root, dir}) fs::permissions(d, fs::perms::owner_all);
-    return (dir / (safe_file_name(partner) + ".log")).string();
+    return (dir / (SafeFileName(partner) + ".log")).string();
 }
 
 }  // namespace beseda
