@@ -26,6 +26,7 @@ void Usage(const char* prog) {
               << "Type a line and press Enter to send it. Ctrl-D quits.\n"
               << "Messages are acknowledged by the peer and resent if lost; \"* no delivery\n"
               << "confirmation\" means a message may not have arrived (both sides need this version).\n"
+              << "You are told when your partner comes online, leaves, or goes silent for 10 s.\n"
               << "Type /history [N] to show the last N messages (default: all) with timestamps.\n"
               << "History is saved per partner in $XDG_DATA_HOME/beseda (default ~/.local/share/beseda)\n"
               << "and restored once your partner's name is known (their first message).\n";

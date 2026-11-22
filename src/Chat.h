@@ -32,10 +32,7 @@ constexpr std::uint16_t kDefaultPort = 50000;
 // recognised by id and shown only once. On EOF, Run() waits for outstanding
 // messages to be confirmed or given up on before returning.
 //
-// Sent and received messages are kept in a history with local timestamps;
-// typing "/history [N]" prints the last N (default: all). The chat partner is
-// the first named sender heard from: once known, the saved history with them
-// is restored and every message is also saved to their history file.
+// While a peer is known, a PING is sent every few seconds and a BYE on exit. 
 class ChatPeer {
 public:
     ChatPeer(std::uint16_t listenPort, std::optional<Endpoint> peer, std::string name);
@@ -71,6 +68,14 @@ private:
     // Blocks until no messages are pending.
     void WaitForPending();
 
+    // Sets the peer to `from` if none is known yet. Returns true if it did.
+    bool LearnPeer(const Endpoint& from);
+    // Updates the partner's online state from a packet received from `from`.
+    void UpdatePresence(const Endpoint& from, const Packet& packet);
+    // Sends a PING when due and notices a silent partner. Returns how long
+    // Receive() may block, in milliseconds.
+    int HeartbeatDue();
+
     UdpSocket socket_;
     const std::string name_;
     std::mutex peerMutex_;
@@ -87,6 +92,13 @@ private:
     // Recently received message ids, for dropping duplicates (receive thread only).
     std::deque<std::uint64_t> seenOrder_;
     std::unordered_set<std::uint64_t> seenIds_;
+
+    // Presence (receive thread only).
+    bool heartbeatSeen_ = false;  // the partner sends PINGs, so silence means something
+    bool online_ = false;
+    std::string partnerName_;
+    std::chrono::steady_clock::time_point lastHeard_;
+    std::chrono::steady_clock::time_point nextPing_;  // epoch: ping as soon as a peer is known
 };
 
 }  // namespace beseda

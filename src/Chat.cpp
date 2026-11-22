@@ -24,8 +24,19 @@ constexpr int kMaxSends = 5;
 constexpr int kPollMs = 200;                // longest wait between checks
 constexpr std::size_t kSeenCapacity = 1024;  // incoming ids remembered for dedup
 
+// Presence: a PING every kPingInterval; a partner silent for kOfflineAfter
+// (about three missed PINGs) is reported offline.
+constexpr std::chrono::seconds kPingInterval{3};
+constexpr std::chrono::seconds kOfflineAfter{10};
+
 Clock::duration RetryDelay(int sends) {
     return kFirstRetry * (1 << (sends - 1));
+}
+
+// Milliseconds from `now` until `then`, rounded up and clamped to [1, kPollMs].
+int PollTimeout(Clock::time_point now, Clock::time_point then) {
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(then - now).count() + 1;
+    return static_cast<int>(std::clamp<long long>(ms, 1, kPollMs));
 }
 
 // Random start, so a restarted peer does not reuse ids the other side has seen.
@@ -43,6 +54,13 @@ void ChatPeer::Run() {
     std::thread receiver(&ChatPeer::ReceiveLoop, this);
     SendLoop();
     WaitForPending();
+    if (auto target = Peer()) {
+        try {
+            socket_.SendTo(*target, EncodeBye(name_));
+        } catch (const std::exception&) {
+            // The peer will notice the missing PINGs instead.
+        }
+    }
     running_ = false;
     receiver.join();
 }
@@ -54,7 +72,7 @@ std::optional<Endpoint> ChatPeer::Peer() {
 
 void ChatPeer::ReceiveLoop() {
     while (running_) {
-        const int timeoutMs = RetransmitDue();
+        const int timeoutMs = std::min(RetransmitDue(), HeartbeatDue());
         std::optional<Datagram> msg;
         try {
             msg = socket_.Receive(timeoutMs);
@@ -67,10 +85,21 @@ void ChatPeer::ReceiveLoop() {
 
         auto packet = Decode(msg->payload);
         if (!packet) continue;  // malformed BESEDA1 packet
+
+        // ACK and BYE only answer or end a chat; anything else can start one.
+        const bool opensChat =
+            packet->kind != Packet::Kind::Ack && packet->kind != Packet::Kind::Bye;
+        if (opensChat && LearnPeer(msg->from)) {
+            std::lock_guard<std::mutex> lock(gOutputMutex);
+            std::cerr << "* chatting with " << msg->from.ToString() << std::endl;
+        }
+        UpdatePresence(msg->from, *packet);
+
         if (packet->kind == Packet::Kind::Ack) {
             HandleAck(msg->from, packet->id);
             continue;
         }
+        if (packet->kind == Packet::Kind::Ping || packet->kind == Packet::Kind::Bye) continue;
         if (packet->kind == Packet::Kind::Message) {
             // ACK every copy: if our earlier ACK was lost, the sender is retrying.
             try {
@@ -81,21 +110,11 @@ void ChatPeer::ReceiveLoop() {
             if (!RememberId(packet->id)) continue;  // already shown
         }
 
-        bool learned = false;
-        {
-            std::lock_guard<std::mutex> lock(peerMutex_);
-            if (!peer_) {
-                peer_ = msg->from;
-                learned = true;
-            }
-        }
-
         const bool named = !packet->name.empty();
         std::string sender = named ? std::move(packet->name) : msg->from.ToString();
         std::string text = std::move(packet->data);
 
         std::lock_guard<std::mutex> lock(gOutputMutex);
-        if (learned) std::cerr << "* chatting with " << msg->from.ToString() << std::endl;
         // The first named sender is the chat partner: restore our saved history
         // with them before recording this message.
         if (named && !historyFailed_ && !history_.Attached()) RestoreHistory(sender);
@@ -188,8 +207,65 @@ int ChatPeer::RetransmitDue() {
         }
     }
 
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(next - now).count() + 1;
-    return static_cast<int>(std::clamp<long long>(ms, 1, kPollMs));
+    return PollTimeout(now, next);
+}
+
+bool ChatPeer::LearnPeer(const Endpoint& from) {
+    std::lock_guard<std::mutex> lock(peerMutex_);
+    if (peer_) return false;
+    peer_ = from;
+    return true;
+}
+
+void ChatPeer::UpdatePresence(const Endpoint& from, const Packet& packet) {
+    const auto target = Peer();
+    if (!target || !(*target == from)) return;
+    if (packet.kind == Packet::Kind::Ping || packet.kind == Packet::Kind::Bye) {
+        heartbeatSeen_ = true;
+        partnerName_ = packet.name;
+    }
+    if (!heartbeatSeen_) return;
+
+    const char* change = nullptr;
+    if (packet.kind == Packet::Kind::Bye) {
+        if (online_) change = " left";
+        online_ = false;
+    } else {
+        lastHeard_ = Clock::now();
+        if (!online_) change = " is online";
+        online_ = true;
+    }
+    if (change != nullptr) {
+        std::lock_guard<std::mutex> lock(gOutputMutex);
+        std::cerr << "* " << partnerName_ << change << std::endl;
+    }
+}
+
+int ChatPeer::HeartbeatDue() {
+    const auto target = Peer();
+    if (!target) return kPollMs;
+    const auto now = Clock::now();
+    if (now >= nextPing_) {
+        try {
+            socket_.SendTo(*target, EncodePing(name_));
+        } catch (const std::exception&) {
+            // One missed PING is harmless; the next is a few seconds away.
+        }
+        nextPing_ = now + kPingInterval;
+    }
+
+    auto next = nextPing_;
+    if (online_) {
+        const auto offlineAt = lastHeard_ + kOfflineAfter;
+        if (now >= offlineAt) {
+            online_ = false;
+            std::lock_guard<std::mutex> lock(gOutputMutex);
+            std::cerr << "* " << partnerName_ << " went offline" << std::endl;
+        } else {
+            next = std::min(next, offlineAt);
+        }
+    }
+    return PollTimeout(now, next);
 }
 
 bool ChatPeer::RememberId(std::uint64_t id) {
