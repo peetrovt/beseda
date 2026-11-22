@@ -1,0 +1,41 @@
+# Naming rules for beseda. Run: clang-tidy src/*.cpp -p build
+# (needs build/compile_commands.json; see CMAKE_EXPORT_COMPILE_COMMANDS)
+#
+#   Types, functions, enum values   PascalCase       ChatPeer, SendTo, Kind::Ack
+#   Parameters, locals, fields      camelCase        listenPort, timeoutMs
+#   Private data members            camelCase + _    pendingMutex_
+#   Constants                       k + PascalCase   kMaxNameSize
+#   Globals                         g + PascalCase   gOutputMutex
+#   Namespaces                      lower_case       beseda
+Checks: '-*,readability-identifier-naming'
+WarningsAsErrors: ''
+HeaderFilterRegex: 'src/.*'
+
+CheckOptions:
+  - { key: readability-identifier-naming.NamespaceCase,          value: lower_case }
+  - { key: readability-identifier-naming.ClassCase,              value: CamelCase }
+  - { key: readability-identifier-naming.StructCase,             value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase,               value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase,       value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase,          value: CamelCase }
+  - { key: readability-identifier-naming.TypedefCase,            value: CamelCase }
+
+  - { key: readability-identifier-naming.FunctionCase,           value: CamelCase }
+  - { key: readability-identifier-naming.MethodCase,             value: CamelCase }
+  - { key: readability-identifier-naming.FunctionIgnoredRegexp,  value: '^main$' }
+
+  - { key: readability-identifier-naming.ParameterCase,          value: camelBack }
+  - { key: readability-identifier-naming.LocalVariableCase,      value: camelBack }
+  - { key: readability-identifier-naming.LocalConstantCase,      value: camelBack }
+  - { key: readability-identifier-naming.StaticVariableCase,     value: camelBack }
+
+  - { key: readability-identifier-naming.MemberCase,             value: camelBack }
+  - { key: readability-identifier-naming.PrivateMemberCase,      value: camelBack }
+  - { key: readability-identifier-naming.PrivateMemberSuffix,    value: '_' }
+
+  - { key: readability-identifier-naming.ConstexprVariableCase,  value: CamelCase }
+  - { key: readability-identifier-naming.ConstexprVariablePrefix, value: k }
+  - { key: readability-identifier-naming.GlobalConstantCase,     value: CamelCase }
+  - { key: readability-identifier-naming.GlobalConstantPrefix,   value: k }
+  - { key: readability-identifier-naming.GlobalVariableCase,     value: CamelCase }
+  - { key: readability-identifier-naming.GlobalVariablePrefix,   value: g }

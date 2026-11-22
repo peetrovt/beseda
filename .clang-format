@@ -1,0 +1,24 @@
+# Formatting for beseda. Run: clang-format -i src/*.cpp src/*.h
+BasedOnStyle: Google
+Standard: c++17
+
+IndentWidth: 4
+AccessModifierOffset: -4          # public:/private: flush with the class keyword
+NamespaceIndentation: None
+ColumnLimit: 100
+
+DerivePointerAlignment: false
+PointerAlignment: Left            # char* p, const Endpoint& e
+
+AllowShortIfStatementsOnASingleLine: WithoutElse   # if (!msg) continue;
+AllowShortLoopsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline           # only short member functions in a class body
+AllowShortBlocksOnASingleLine: Empty
+
+SpacesBeforeTrailingComments: 2
+
+# Keep include groups as written (standard/system headers, then project headers);
+# sort only within each group.
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
