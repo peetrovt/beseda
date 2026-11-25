@@ -23,6 +23,7 @@ constexpr std::chrono::milliseconds kFirstRetry{250};
 constexpr int kMaxSends = 5;
 constexpr int kPollMs = 200;                // longest wait between checks
 constexpr std::size_t kSeenCapacity = 1024;  // incoming ids remembered for dedup
+constexpr std::size_t kMaxIgnoredReported = 64;  // other addresses reported, at most
 
 // Presence: a PING every kPingInterval; a partner silent for kOfflineAfter
 // (about three missed PINGs) is reported offline.
@@ -92,6 +93,20 @@ void ChatPeer::ReceiveLoop() {
         if (opensChat && LearnPeer(msg->from)) {
             std::lock_guard<std::mutex> lock(gOutputMutex);
             std::cerr << "* chatting with " << msg->from.ToString() << std::endl;
+        }
+        if (!(Peer() == msg->from)) {
+            // Not our peer: drop it unanswered (no ACK), so strangers can neither
+            // inject text nor bounce traffic off us. Report chat text once per
+            // address, without the text itself.
+            const bool chatText =
+                packet->kind == Packet::Kind::Message || packet->kind == Packet::Kind::Legacy;
+            if (chatText && ignoredSenders_.size() < kMaxIgnoredReported &&
+                ignoredSenders_.insert(msg->from.ToString()).second) {
+                std::lock_guard<std::mutex> lock(gOutputMutex);
+                std::cerr << "* ignoring messages from " << msg->from.ToString()
+                          << " (not your chat partner)" << std::endl;
+            }
+            continue;
         }
         UpdatePresence(msg->from, *packet);
 

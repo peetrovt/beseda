@@ -22,6 +22,7 @@ void Usage(const char* prog) {
               << "  -u NAME         username shown to your peer (default $USER, max " << kMaxNameSize << " bytes)\n"
               << "  HOST[:PORT]     peer to chat with (port defaults to " << kDefaultPort << ").\n"
               << "                  Without it, you chat with whoever messages you first.\n"
+              << "                  Messages from anyone else are ignored.\n"
               << "\n"
               << "Type a line and press Enter to send it. Ctrl-D quits.\n"
               << "Messages are acknowledged by the peer and resent if lost; \"* no delivery\n"

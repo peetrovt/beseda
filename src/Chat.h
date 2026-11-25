@@ -8,6 +8,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_set>
 
@@ -23,7 +24,9 @@ constexpr std::uint16_t kDefaultPort = 50000;
 // and to send lines typed on stdin. See Protocol.h for the wire format.
 //
 // If no peer is given up front, the peer becomes the sender of the first
-// message received, so replies go straight back to them.
+// message received, so replies go straight back to them. Once the peer is known,
+// packets from any other address are dropped unanswered; the first chat message
+// from each such address is reported once, without its text.
 // Every message sent carries this peer's username.
 //
 // Delivery: every message gets an id and the receiver ACKs it. Unconfirmed
@@ -83,6 +86,8 @@ private:
     std::atomic<bool> running_{true};
     MessageHistory history_;
     bool historyFailed_ = false;  // only touched by the receive thread
+    // Other addresses already reported as ignored (receive thread only).
+    std::set<std::string> ignoredSenders_;
 
     std::uint64_t nextId_;  // only touched by the send thread
     std::mutex pendingMutex_;
